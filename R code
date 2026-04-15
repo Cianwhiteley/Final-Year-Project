@@ -1,0 +1,801 @@
+counts <- read.table("featurecounts.txt", header = TRUE)
+
+row.names(counts) <- counts$Geneid
+
+counts <- counts[ , -c(1:6) ]
+
+Study1.counts <- counts[, grepl("Study1", colnames(counts))]
+Study2.counts <- counts[, grepl("Study2", colnames(counts))]
+Study3.counts <- counts[, grepl("Study3", colnames(counts))]
+
+orig_namesS1 <- names(Study1.counts)
+orig_namesS2 <- names(Study2.counts)
+orig_namesS3 <- names(Study3.counts)
+
+clean_names1 <- gsub(".*(Study[0-9]+)_(week[0-9]+)_(WT|KO)_rep([0-9]+).*",
+  "\\1_\\2_\\3_rep\\4", orig_namesS1)
+clean_names2 <- gsub(".*(Study[0-9]+)_(person[A-B])_(WT|KO)_rep([0-9]+).*",
+  "\\1_\\2_\\3_rep\\4", orig_namesS2)
+clean_names3 <- gsub( ".*(Study[0-9]+)_(WT|KO)_rep([0-9]+).*",
+  "\\1_\\2_rep\\3",orig_namesS3)
+
+colnames(Study1.counts) <- clean_names1
+colnames(Study2.counts) <- clean_names2
+colnames(Study3.counts) <- clean_names3
+
+metadataS1 <- data.frame( week     = sub(".*_(week[0-9]+)_.*", "\\1", colnames(Study1.counts)),
+  genotype = sub(".*_(WT|KO)_rep[0-9]+", "\\1", colnames(Study1.counts)), row.names = colnames(Study1.counts))
+metadataS2 <- data.frame(genotype = sub(".*_(WT|KO)_rep[0-9]+$", "\\1", colnames(Study2.counts)),
+  person = ifelse(grepl("_person[A-B]_", colnames(Study2.counts)), sub(".*_(person[A-B])_.*", "\\1", 
+  colnames(Study2.counts)), NA),row.names = colnames(Study2.counts),stringsAsFactors = FALSE)
+metadataS3  <- data.frame(genotype = sub(".*_(WT|KO)_rep[0-9]+", "\\1", colnames(Study3.counts)),
+  row.names = colnames(Study3.counts))
+
+
+dds.S1 <- DESeqDataSetFromMatrix( countData = Study1.counts,
+  colData = metadataS1, design = ~ week + genotype)
+dds.S2 <- DESeqDataSetFromMatrix(countData = Study2.counts,
+  colData = metadataS2,design = ~ person + genotype)
+dds.S3 <- DESeqDataSetFromMatrix(countData = Study3.counts,
+  colData = metadataS3,design = ~ genotype)
+
+dds.S1$genotype <- factor(dds.S1$genotype, levels = c("WT","KO"))
+dim(dds.S1)
+dim(dds.S1[rowSums(counts(dds.S1)) > 0, ])
+dds.S1 <- dds.S1[rowSums(counts(dds.S1)) > 0, ]
+rld.S1 <- rlog(dds.S1, blind=TRUE)
+
+dds.S2$genotype <- factor(dds.S2$genotype, levels = c("WT","KO"))
+dim(dds.S2)
+dim(dds.S2[rowSums(counts(dds.S2)) > 0, ])
+dds.S2 <- dds.S2[rowSums(counts(dds.S2)) > 0, ]
+rld.S2 <- rlog(dds.S2, blind=TRUE)
+
+dds.S3$genotype <- factor(dds.S3$genotype, levels = c("WT","KO"))
+dim(dds.S3)
+dim(dds.S3[rowSums(counts(dds.S3)) > 0, ])
+dds.S3 <- dds.S3[rowSums(counts(dds.S3)) > 0, ]
+rld.S3 <- rlog(dds.S3, blind=TRUE)
+
+PCA.S1 <- plotPCA(rld.S1, intgroup= ("genotype")) +
+  geom_text(aes(label=name), hjust="inward", vjust=2, size=2)
+PCA.S2 <- plotPCA(rld.S2, intgroup= c("genotype", "person")) + 
+  geom_text(aes(label=name), hjust="inward", vjust=2, size=2)
+PCA.S3 <- plotPCA(rld.S3, intgroup= ("genotype")) + 
+  geom_text(aes(label=name),hjust="inward", vjust=2, size=2)
+
+(PCA.S1 | PCA.S2 | PCA.S3) +
+  plot_annotation( title = "PCA of Samples Across Three Studies",
+    theme = theme(plot.title = element_text(size = 18, face = "bold", hjust = 0.5)))
+
+sampleDists.S1 <- dist(t(assay(rld.S1)))
+sampleDists.S2 <- dist(t(assay(rld.S2)))
+sampleDists.S3 <- dist(t(assay(rld.S3)))
+
+sampleDistMatrix.S1 <- as.matrix( sampleDists.S1 )
+sampleDistMatrix.S2 <- as.matrix( sampleDists.S2 )
+sampleDistMatrix.S3 <- as.matrix( sampleDists.S3 )
+
+rownames(sampleDistMatrix.S1) <- rld.S1$genotype
+rownames(sampleDistMatrix.S2) <- rld.S2$genotype
+rownames(sampleDistMatrix.S3) <- rld.S3$genotype
+
+rownames(sampleDistMatrix.S1) <- paste( rld.S1$genotype, rld.S1$week, sep = " - " )
+rownames(sampleDistMatrix.S2) <- paste( rld.S2$genotype, rld.S2$person, sep = " - " )
+rownames(sampleDistMatrix.S3) <- paste( rld.S3$genotype, sep = " - " )
+
+colnames(sampleDistMatrix.S1) <- NULL
+colnames(sampleDistMatrix.S2) <- NULL
+colnames(sampleDistMatrix.S3) <- NULL
+
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+
+HC.map.S1 <- pheatmap( sampleDistMatrix.S1, clustering_distance_rows = sampleDists.S1,
+  clustering_distance_cols = sampleDists.S1,col = colors, silent = TRUE)
+HC.map.S2 <- pheatmap( sampleDistMatrix.S2, clustering_distance_rows = sampleDists.S2,
+  clustering_distance_cols = sampleDists.S2,col = colors, silent = TRUE)
+HC.map.S3 <- pheatmap( sampleDistMatrix.S3,clustering_distance_rows = sampleDists.S3,
+  clustering_distance_cols = sampleDists.S3,col = colors, silent = TRUE)
+
+HC.map.S1 <- as.ggplot(HC.map.S1$gtable)
+HC.map.S2 <- as.ggplot(HC.map.S2$gtable)
+HC.map.S3 <- as.ggplot(HC.map.S3$gtable)
+
+(HC.map.S1 / HC.map.S2 / HC.map.S3) +
+  plot_annotation( title = "Hierarchical Clustering of Samples Across Studies",
+    theme = theme( plot.title = element_text(size = 18, face = "bold", hjust = 0.5)))
+
+dds.S1A <- DESeq(dds.S1)
+dds.S2A <- DESeq(dds.S2)
+dds.S3A <- DESeq(dds.S3)
+
+KOvsWT.S1 <-results(dds.S1A, contrast=c("genotype","KO","WT"), independentFiltering = TRUE , alpha = 0.05)
+KOvsWT.S2 <-results(dds.S2A, contrast=c("genotype","KO","WT"), independentFiltering = TRUE , alpha = 0.05)
+KOvsWT.S3 <-results(dds.S3A, contrast=c("genotype","KO","WT"), independentFiltering = TRUE , alpha = 0.05)
+
+summary(KOvsWT.S1)
+table(KOvsWT.S1$padj < 0.05)
+summary(KOvsWT.S2)
+table(KOvsWT.S2$padj < 0.05)
+summary(KOvsWT.S3)
+table(KOvsWT.S3$padj < 0.05)
+
+write.table(as.data.frame(KOvsWT.S1[order(KOvsWT.S1$padj),] ), file="KO_vs_WT_dge.txt",sep="\t", quote = FALSE)
+write.table(as.data.frame(KOvsWT.S2[order(KOvsWT.S2$padj),] ), file="KO_vs_WT_dge.txt",sep="\t", quote = FALSE)
+write.table(as.data.frame(KOvsWT.S3[order(KOvsWT.S3$padj),] ), file="KO_vs_WT_dge.txt",sep="\t", quote = FALSE)
+
+plotCounts(dds.S1A, gene="TREM2", intgroup="genotype")
+plotCounts(dds.S2A, gene="TREM2", intgroup="genotype") 
+plotCounts(dds.S3A, gene="TREM2", intgroup="genotype") 
+
+KOvsWT_sorted.S1 <- KOvsWT.S1[order(KOvsWT.S1$padj),]
+KOvsWT_sorted.S2 <- KOvsWT.S2[order(KOvsWT.S2$padj),]
+KOvsWT_sorted.S3 <- KOvsWT.S3[order(KOvsWT.S3$padj),]
+
+KOvsWT_top20.S1 <- head(KOvsWT_sorted.S1, n=20)
+KOvsWT_top20.S2 <- head(KOvsWT_sorted.S2, n=20)
+KOvsWT_top20.S3 <- head(KOvsWT_sorted.S3, n=20)
+
+top20_genes_KOvsWT.S1 <- rownames(KOvsWT_top20.S1)
+top20_genes_KOvsWT.S2 <- rownames(KOvsWT_top20.S2)
+top20_genes_KOvsWT.S3 <- rownames(KOvsWT_top20.S3)
+
+rlog.dge.S1 <- rld.S1[top20_genes_KOvsWT.S1,] %>% assay
+rlog.dge.S2 <- rld.S2[top20_genes_KOvsWT.S2,] %>% assay
+rlog.dge.S3 <- rld.S3[top20_genes_KOvsWT.S3,] %>% assay
+
+heatmap.S1 <- pheatmap( rlog.dge.S1, scale = "row",
+  main = "Differential Gene Expression (row-based z-score)", silent = TRUE)
+heatmap.S2 <- pheatmap(rlog.dge.S2,scale = "row",
+  main = "Differential Gene Expression (row-based z-score)", silent = TRUE)
+heatmap.S3 <- pheatmap(rlog.dge.S3,scale = "row",
+  main = "Differential Gene Expression (row-based z-score)",silent = TRUE)
+
+heatmap.S1 <- as.ggplot(heatmap.S1$gtable)
+heatmap.S2 <- as.ggplot(heatmap.S2$gtable)
+heatmap.S3 <- as.ggplot(heatmap.S3$gtable)
+
+(heatmap.S1 / heatmap.S2 / heatmap.S3) + 
+  plot_annotation( title = "Hierarchical Clustering of Samples Across Studies",
+                                                          theme = theme( plot.title = element_text(size = 18, face = "bold", hjust = 0.5)))
+
+
+KOvsWT_tb.S1 <- KOvsWT.S1 %>% data.frame() %>% rownames_to_column(var="gene") %>% as_tibble()
+KOvsWT_tb.S2 <- KOvsWT.S2 %>% data.frame() %>% rownames_to_column(var="gene") %>% as_tibble()
+KOvsWT_tb.S3 <- KOvsWT.S3 %>% data.frame() %>% rownames_to_column(var="gene") %>% as_tibble()
+
+KOvsWT_tb.S1 <- KOvsWT_tb.S1 %>% mutate(threshold = padj < 0.05)
+KOvsWT_tb.S2 <- KOvsWT_tb.S2 %>% mutate(threshold = padj < 0.05)
+KOvsWT_tb.S3 <- KOvsWT_tb.S3 %>% mutate(threshold = padj < 0.05)
+
+KOvsWT_tb.S1 <- KOvsWT_tb.S1 %>% arrange(padj) %>% mutate(genelabels = "")
+KOvsWT_tb.S2 <- KOvsWT_tb.S2 %>% arrange(padj) %>% mutate(genelabels = "")
+KOvsWT_tb.S3 <- KOvsWT_tb.S3 %>% arrange(padj) %>% mutate(genelabels = "")
+
+KOvsWT_tb.S1$genelabels[1:10] <- KOvsWT_tb.S1 $gene[1:10]
+KOvsWT_tb.S2$genelabels[1:10] <- KOvsWT_tb.S2 $gene[1:10]
+KOvsWT_tb.S3$genelabels[1:10] <- KOvsWT_tb.S3 $gene[1:10]
+
+volcano_plot.S1 <- ggplot(KOvsWT_tb.S1, aes(x = log2FoldChange, y = -log10(padj))) +
+  geom_point(aes(colour = threshold)) +geom_text_repel(aes(label = genelabels)) +
+  ggtitle("KOvsWT Study 1") +xlab("log2 fold change") + 
+  ylab("-log10 adjusted p-value") +theme(legend.position = "none",
+  plot.title = element_text(size = rel(1.5), hjust = 0.5), axis.title = element_text(size = rel(1.25)))
+volcano.S2 <- ggplot(KOvsWT_tb.S2, aes(x = log2FoldChange, y = -log10(padj))) +
+  geom_point(aes(colour = threshold)) +geom_text_repel(aes(label = genelabels)) +
+  ggtitle("KOvsWT Study 2") +xlab("log2 fold change") +
+  ylab("-log10 adjusted p-value") + theme(legend.position = "none",
+  plot.title = element_text(size = rel(1.5), hjust = 0.5), axis.title = element_text(size = rel(1.25)))
+volcano.S3 <- ggplot(KOvsWT_tb.S3, aes(x = log2FoldChange, y = -log10(padj))) +
+  geom_point(aes(colour = threshold)) +geom_text_repel(aes(label = genelabels)) +
+  ggtitle("KOvsWT Study 3") + xlab("log2 fold change") +
+  ylab("-log10 adjusted p-value") +theme(legend.position = "none",
+  plot.title = element_text(size = rel(1.5), hjust = 0.5), axis.title = element_text(size = rel(1.25)))
+ 
+(volcano_plot.S1 / volcano.S2 / volcano.S3) +  plot_annotation(
+  title = "KO vs WT all studies: Differential Expression Overview",
+  theme = theme( plot.title = element_text(size = 18, face = "bold", hjust = 0.5)))
+
+(volcano_plot.S1 / heatmap.S1) +
+  plot_annotation( title = "KO vs WT Study 1: Differential Expression Overview",
+    theme = theme( plot.title = element_text(size = 18, face = "bold", hjust = 0.5)))
+(volcano.S2 / heatmap.S2) +
+  plot_annotation( title = "KO vs WT Study 2: Differential Expression Overview",
+    theme = theme(plot.title = element_text(size = 18, face = "bold", hjust = 0.5)))
+(volcano.S3 / heatmap.S3) +
+  plot_annotation(title = "KO vs WT Study 3: Differential Expression Overview",
+    theme = theme( plot.title = element_text(size = 18, face = "bold", hjust = 0.5)))
+
+counts.S1 <- plotCounts(dds.S1A, gene = "TREM2", intgroup = "genotype", returnData = TRUE)
+counts.S2 <- plotCounts(dds.S2A, gene = "TREM2", intgroup = "genotype", returnData = TRUE)
+counts.S3 <- plotCounts(dds.S3A, gene = "TREM2", intgroup = "genotype", returnData = TRUE)
+
+counts.S1$study <- "Study 1"
+counts.S2$study <- "Study 2"
+counts.S3$study <- "Study 3"
+
+combined_counts <- bind_rows(counts.S1, counts.S2, counts.S3)
+
+ggplot(combined_counts, aes(x = genotype, y = count, colour = genotype)) + geom_jitter(width = 0.1, size = 3) + scale_y_log10() +
+  facet_wrap(~study) + labs( title = "TREM2 Normalized Counts Across Studies", x = "Genotype", y = "Normalized Counts" ) + theme_classic()
+
+#pulling out the results
+res.S1A <- results(dds.S1A)
+res.S2A <- results(dds.S2A)
+res.S3A <- results(dds.S3A)
+
+dexp.S1A <- as.data.frame(res.S1A)
+dexp.S2A <- as.data.frame(res.S2A)
+dexp.S3A <- as.data.frame(res.S3A)
+
+sigDEGs.S1A <- dplyr::filter(dexp.S1A, padj < 0.05)
+sigDEGs.S2A <- dplyr::filter(dexp.S2A, padj < 0.05)
+sigDEGs.S3A <- dplyr::filter(dexp.S3A, padj < 0.05)
+
+sig_down.S1A <- dplyr::filter(dexp.S1A, padj < 0.05 & log2FoldChange < 0)
+sig_down.S2A <- dplyr::filter(dexp.S2A, padj < 0.05 & log2FoldChange < 0)
+sig_down.S3A <- dplyr::filter(dexp.S3A, padj < 0.05 & log2FoldChange < 0)
+
+sig_up.S2A <- dplyr::filter(dexp.S2A, padj < 0.05 & log2FoldChange > 0)
+sig_up.S3A <- dplyr::filter(dexp.S3A, padj < 0.05 & log2FoldChange > 0)
+sig_up.S1A <- dplyr::filter(dexp.S1A, padj < 0.05 & log2FoldChange > 0)
+
+sigDEGs.S1A$gene <- rownames(sigDEGs.S1A)
+sigDEGs.S2A$gene <- rownames(sigDEGs.S2A)
+sigDEGs.S3A$gene <- rownames(sigDEGs.S3A)
+
+SigDEG_sub.1 <- sigDEGs.S1A[, c("gene", "log2FoldChange")]
+SigDEG_sub.2 <- sigDEGs.S2A[, c("gene", "log2FoldChange")]
+SigDEG_sub.3 <- sigDEGs.S3A[, c("gene", "log2FoldChange")]
+
+merged.sigDEGs <- Reduce(function(x, y) merge(x, y, by = "gene"),
+                 list(SigDEG_sub.1, SigDEG_sub.2, SigDEG_sub.3))
+
+colnames(merged.sigDEGs) <- c("gene", "log2FC_1", "log2FC_2", "log2FC_3")
+
+cor(merged.sigDEGs[,2:4])
+
+boxplot(merged.sigDEGs[,2:4],
+        names = c("Study 1", "Study 2", "Study 3"),
+        main = "log2FC Comparison")
+
+#Hypergeometric overlap
+
+AD_genes <- read.table("AD_loci.txt",
+                       stringsAsFactors = FALSE)[,1]
+
+M.S1A <- length(rownames(dexp.S1A))                     
+K.S1A <- sum(rownames(dexp.S1A) %in% AD_genes)           
+Nu.S1A <- length(rownames(sig_up.S1A))                    
+xu.S1A <- sum(rownames(sig_up.S1A) %in% AD_genes) 
+
+M.S2A <- length(rownames(dexp.S2A))                     
+K.S2A <- sum(rownames(dexp.S2A) %in% AD_genes)           
+Nu.S2A <- length(rownames(sig_up.S2A))                    
+xu.S2A <- sum(rownames(sig_up.S2A) %in% AD_genes)  
+
+M.S3A <- length(rownames(dexp.S3A))                     
+K.S3A <- sum(rownames(dexp.S3A) %in% AD_genes)           
+Nu.S3A <- length(rownames(sig_up.S3A))                    
+xu.S3A <- sum(rownames(sig_up.S3A) %in% AD_genes)  
+
+phyper(xu.S1A - 1, K.S1A, M.S1A - K.S1A, Nu.S1A, lower.tail = FALSE)
+phyper(xu.S2A - 1, K.S2A, M.S2A - K.S2A, Nu.S2A, lower.tail = FALSE)
+phyper(xu.S3A - 1, K.S3A, M.S3A - K.S3A, Nu.S3A, lower.tail = FALSE)
+
+fold_enrichment.up.S1A <- (xu.S1A / Nu.S1A) / (K.S1A / M.S1A)
+fold_enrichment.up.S2A <- (xu.S2A / Nu.S2A) / (K.S2A / M.S2A)
+fold_enrichment.up.S3A <- (xu.S3A / Nu.S3A) / (K.S3A / M.S3A)
+
+overlap_genes.S1A <- intersect(rownames(sig_up.S1A), AD_genes)
+overlap_genes.S2A <- intersect(rownames(sig_up.S2A), AD_genes)
+overlap_genes.S3A <- intersect(rownames(sig_up.S3A), AD_genes)
+
+Nd.S1A <- length(rownames(sig_down.S1A))
+xd.S1A <- sum(rownames(sig_down.S1A) %in% AD_genes)
+Nd.S2A <- length(rownames(sig_down.S2A))
+xd.S2A <- sum(rownames(sig_down.S2A) %in% AD_genes)
+Nd.S3A <- length(rownames(sig_down.S3A))
+xd.S3A <- sum(rownames(sig_down.S3A) %in% AD_genes)
+
+
+phyper(xd.S2A - 1, K.S2A, M.S2A - K.S2A, Nd.S2A, lower.tail = FALSE)
+phyper(xd.S3A - 1, K.S3A, M.S3A - K.S3A, Nd.S3A, lower.tail = FALSE)
+phyper(xd.S1A - 1, K.S1A, M.S1A - K.S1A, Nd.S1A, lower.tail = FALSE)
+
+fold_enrichment.dwn.S1A <- (xd.S1A / Nd.S1A) / (K.S1A / M.S1A)
+fold_enrichment.dwn.S2A <- (xd.S2A / Nd.S2A) / (K.S2A / M.S2A)
+fold_enrichment.dwn.S3A <- (xd.S3A / Nd.S3A) / (K.S3A / M.S3A)
+
+#ORA
+
+keytypes(org.Hs.eg.db) 
+
+ids.S1A <- bitr(rownames(sigDEGs.S1A),
+        fromType = "SYMBOL", toType   = "ENTREZID",OrgDb    = org.Hs.eg.db)
+
+ego.S1A <- enrichGO(gene= rownames(sig_up.S1A),OrgDb= org.Hs.eg.db,
+  keyType = "SYMBOL",ont= "BP", universe=rownames(dexp.S1A))
+ego.S2A <- enrichGO( gene = rownames(sig_up.S2A), OrgDb = org.Hs.eg.db,
+  keyType = "SYMBOL", ont = "BP",universe = rownames(dexp.S2A))
+ego.S3A <- enrichGO(gene= rownames(sig_up.S3A), OrgDb= org.Hs.eg.db,
+  keyType = "SYMBOL",ont= "BP", universe=rownames(dexp.S3A))
+
+s_ego.S1A <-clusterProfiler::simplify(ego.S1A)
+s_ego.S2A <-clusterProfiler::simplify(ego.S2A)
+s_ego.S3A <-clusterProfiler::simplify(ego.S3A)
+
+dotplot(s_ego.S1A,showCategory=20,font.size=10,label_format=70)+
+    scale_size_continuous(range=c(1, 7))+ theme_minimal() + ggtitle("GO Enrichment of up-regulated genes")
+dotplot(s_ego.S2A,showCategory=20,font.size=10,label_format=70)+
+    scale_size_continuous(range=c(1, 7))+ theme_minimal() + ggtitle("GO Enrichment of up-regulated genes")
+dotplot(s_ego.S3A,showCategory=20,font.size=10,label_format=70)+
+    scale_size_continuous(range=c(1, 7))+ theme_minimal() + ggtitle("GO Enrichment of up-regulated genes")
+
+s_ego.S1A %>% filter(p.adjust < 0.03) %>%
+  ggplot(showCategory = 20, aes(GeneRatio, forcats::fct_reorder(Description, GeneRatio))) + 
+  geom_segment(aes(xend=0, yend = Description)) + geom_point(aes(color=p.adjust, size = Count)) +
+  scale_color_viridis_c(guide=guide_colorbar(reverse=TRUE)) + scale_size_continuous(range=c(1, 7)) +
+  theme_minimal() + xlab("Gene Ratio") + ylab(NULL) + ggtitle("GO Enrichment of up-regulated genes")
+
+s_ego.S2A %>% filter(p.adjust < 0.03) %>% ggplot(showCategory = 20,aes(GeneRatio, forcats::fct_reorder(Description, GeneRatio))) + geom_segment(aes(xend=0, yend = Description)) + geom_point(aes(color=p.adjust, size = Count)) +  scale_color_viridis_c(guide=guide_colorbar(reverse=TRUE)) + scale_size_continuous(range=c(1, 7)) + theme_minimal() +  xlab("Gene Ratio") +ylab(NULL) +  ggtitle("GO Enrichment of up-regulated genes" 
+                                                               
+s_ego.S3A %>% filter(p.adjust < 0.03) %>%
+  ggplot(showCategory = 20, aes(GeneRatio, forcats::fct_reorder(Description, GeneRatio))) + 
+  geom_segment(aes(xend=0, yend = Description)) + geom_point(aes(color=p.adjust, size = Count)) +
+  scale_color_viridis_c(guide=guide_colorbar(reverse=TRUE)) + scale_size_continuous(range=c(1, 7)) +
+  theme_minimal() + xlab("Gene Ratio") + ylab(NULL) + ggtitle("GO Enrichment of up-regulated genes")
+
+foldchanges.ORA.S1A <- sig_up.S1A$log2FoldChange
+foldchanges.ORA.S2A <- sig_up.S2A$log2FoldChange
+foldchanges.ORA.S3A <- sig_up.S3A$log2FoldChange
+
+names(foldchanges.ORA.S1A) <- rownames(sig_up.S1A)
+names(foldchanges.ORA.S2A) <- rownames(sig_up.S2A)
+names(foldchanges.ORA.S3A) <- rownames(sig_up.S3A)
+
+cnetplot(s_ego.S1A,showCategory = 3,foldChange = foldchanges.ORA.S1A)
+cnetplot(s_ego.S2A,showCategory = 3,foldChange = foldchanges.ORA.S2A)
+cnetplot(s_ego.S3A,showCategory = 3,foldChange = foldchanges.ORA.S3A)
+
+ids_sig.S1A <- bitr(rownames(sig_up.S1A),fromType = "SYMBOL",toType   = "ENTREZID", OrgDb    = org.Hs.eg.db)
+ids_sig.S2A <- bitr(rownames(sig_up.S2A), fromType = "SYMBOL", toType   = "ENTREZID", OrgDb    = org.Hs.eg.db)
+ids_sig.S3A <- bitr(rownames(sig_up.S3A), fromType = "SYMBOL",toType   = "ENTREZID",OrgDb    = org.Hs.eg.db)
+
+entrez_sig.S1A <- ids_sig.S1A$ENTREZID
+entrez_sig.S2A <- ids_sig.S2A$ENTREZID
+entrez_sig.S3A <- ids_sig.S3A$ENTREZID
+
+ids_all.S1A <- bitr(rownames(dexp.S1A),fromType = "SYMBOL", toType   = "ENTREZID", OrgDb    = org.Hs.eg.db)
+ids_all.S2A <- bitr(rownames(dexp.S2A),fromType = "SYMBOL",toType   = "ENTREZID", OrgDb    = org.Hs.eg.db)
+ids_all.S3A <- bitr(rownames(dexp.S3A),fromType = "SYMBOL",toType   = "ENTREZID", OrgDb    = org.Hs.eg.db)
+
+entrez_universe.S1A <- ids_all.S1A$ENTREZID
+entrez_universe.S2A <- ids_all.S2A$ENTREZID
+entrez_universe.S3A <- ids_all.S3A$ENTREZID
+
+kgo.S1A <- enrichKEGG( gene = entrez_sig.S1A,organism = "hsa",universe = entrez_universe.S1A,pvalueCutoff  = 0.05)
+kgo.S2A <- enrichKEGG( gene = entrez_sig.S2A,organism = "hsa",universe = entrez_universe.S2A,pvalueCutoff  = 0.05)
+kgo.S3A <- enrichKEGG( gene = entrez_sig.S3A,organism = "hsa",universe = entrez_universe.S3A,pvalueCutoff  = 0.05)
+
+dotplot(kgo.S1A,showCategory=20,font.size=10,label_format=70)+
+  scale_size_continuous(range=c(1, 7))+ theme_minimal() +
+  ggtitle("KEGG Enrichment of up-regulated genes")
+dotplot(kgo.S2A,showCategory=20,font.size=10,label_format=70)+
+  scale_size_continuous(range=c(1, 7))+theme_minimal() +
+  ggtitle("KEGG Enrichment of up-regulated genes")
+dotplot(kgo.S3A,showCategory=20,font.size=10,label_format=70)+
+  scale_size_continuous(range=c(1, 7))+theme_minimal() + 
+  ggtitle("KEGG Enrichment of up-regulated genes")
+
+mlist.S1A<-list(s_ego.S1A,kgo.S1A)
+mlist.S2A<-list(s_ego.S2A,kgo.S2A)
+mlist.S3A<-list(s_ego.S3A,kgo.S3A)
+
+names(mlist.S1A)<-c("GO-enrich","KEGG-enrich")
+names(mlist.S2A)<-c("GO-enrich","KEGG-enrich")
+names(mlist.S3A)<-c("GO-enrich","KEGG-enrich")
+
+mresult.S1A<-merge_result(mlist.S1A)
+mresult.S2A<-merge_result(mlist.S2A)
+mresult.S3A<-merge_result(mlist.S3A)
+
+dotplot(mresult.S1A,showCategory=10)
+dotplot(mresult.S2A,showCategory=10)
+dotplot(mresult.S3A,showCategory=10)
+
+ego.dwn.S1A <- enrichGO(gene= rownames(sig_down.S1A), OrgDb= org.Hs.eg.db,
+          keyType = "SYMBOL",ont= "BP",universe=rownames(dexp.S1A))
+
+ego.dwn.S2A <- enrichGO(gene= rownames(sig_down.S2A), OrgDb= org.Hs.eg.db,
+          keyType = "SYMBOL",ont= "BP", universe=rownames(dexp.S2A))
+ego.dwn.S3A <- enrichGO(gene= rownames(sig_down.S3A), OrgDb= org.Hs.eg.db, 
+          keyType = "SYMBOL", ont= "BP", universe=rownames(dexp.S3A))
+
+s_ego.dwn.S1A <-clusterProfiler::simplify(ego.dwn.S1A)
+s_ego.dwn.S2A <-clusterProfiler::simplify(ego.dwn.S2A)
+s_ego.dwn.S3A <-clusterProfiler::simplify(ego.dwn.S3A)
+
+dotplot(s_ego.dwn.S1A,showCategory=20,font.size=10,label_format=70)+
+  scale_size_continuous(range=c(1, 7))+ theme_minimal() +
+  ggtitle("GO Enrichment of down-regulated genes")
+dotplot(s_ego.dwn.S2A,showCategory=20,font.size=10,label_format=70)+
+  scale_size_continuous(range=c(1, 7))+ theme_minimal() + 
+  ggtitle("GO Enrichment of down-regulated genes")
+dotplot(s_ego.dwn.S3A,showCategory=20,font.size=10,label_format=70)+ 
+  scale_size_continuous(range=c(1, 7)) + theme_minimal() + 
+  ggtitle("GO Enrichment of down-regulated genes")
+
+s_ego.dwn.S1A %>% filter(p.adjust < 0.03) %>%
+  ggplot(showCategory = 20, aes(GeneRatio, forcats::fct_reorder(Description, GeneRatio))) + 
+  geom_segment(aes(xend=0, yend = Description)) + geom_point(aes(color=p.adjust, size = Count)) +
+  scale_color_viridis_c(guide=guide_colorbar(reverse=TRUE)) + scale_size_continuous(range=c(1, 7)) +
+  theme_minimal() + xlab("Gene Ratio") + ylab(NULL) + ggtitle("GO Enrichment of down-regulated genes")
+s_ego.dwn.S2A %>% filter(p.adjust < 0.03) %>%
+  ggplot(showCategory = 20,aes(GeneRatio, forcats::fct_reorder(Description, GeneRatio))) + 
+  geom_segment(aes(xend=0, yend = Description)) + geom_point(aes(color=p.adjust, size = Count)) +
+  scale_color_viridis_c(guide=guide_colorbar(reverse=TRUE)) +scale_size_continuous(range=c(1, 7)) +
+  theme_minimal() + xlab("Gene Ratio") + ylab(NULL) + ggtitle("GO Enrichment of down-regulated genes")
+s_ego.dwn.S3A %>% filter(p.adjust < 0.03) %>%
+  ggplot(showCategory = 20, aes(GeneRatio, forcats::fct_reorder(Description, GeneRatio))) + 
+  geom_segment(aes(xend=0, yend = Description)) + geom_point(aes(color=p.adjust, size = Count)) +
+  scale_color_viridis_c(guide=guide_colorbar(reverse=TRUE)) + scale_size_continuous(range=c(1, 7)) +
+  theme_minimal() + xlab("Gene Ratio") + ylab(NULL) + ggtitle("GO Enrichment of down-regulated genes")
+
+foldchanges.ORA.dwn.S1A <- sig_down.S1A$log2FoldChange
+foldchanges.ORA.dwn.S2A <- sig_down.S2A$log2FoldChange
+foldchanges.ORA.dwn.S3A <- sig_down.S3A$log2FoldChange
+
+names(foldchanges.ORA.dwn.S1A) <- rownames(sig_down.S1A)
+names(foldchanges.ORA.dwn.S2A) <- rownames(sig_down.S2A)
+names(foldchanges.ORA.dwn.S3A) <- rownames(sig_down.S3A)
+
+s_ego2.dwn.S1A <- s_ego.dwn.S1A
+s_ego2.dwn.S2A <- s_ego.dwn.S2A
+s_ego2.dwn.S3A <- s_ego.dwn.S3A
+
+s_ego2.dwn.S1A@result<-s_ego.dwn.S1A[c(6,15,32),]
+s_ego2.dwn.S2A@result<-s_ego.dwn.S2A[c(6,15,32),]
+s_ego2.dwn.S3A@result<-s_ego.dwn.S3A[c(6,15,32),]
+
+cnetplot(s_ego2.dwn.S1A, foldChange = foldchanges.dwn.S1A,color_category = "purple")
+cnetplot(s_ego2.dwn.S2A, foldChange = foldchanges.dwn.S2A, color_category = "purple")
+cnetplot(s_ego2.dwn.S3A, foldChange = foldchanges.S3A, color_category = "purple")
+
+ids_sig.dwn.S1A <- bitr(rownames(sig_down.S1A),fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+ids_sig.dwn.S2A <- bitr(rownames(sig_down.S2A),fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+ids_sig.dwn.S3A <- bitr(rownames(sig_down.S3A),fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+
+entrez_sig.dwn.S1A <- ids_sig.dwn.S1A$ENTREZID
+entrez_sig.dwn.S2A <- ids_sig.dwn.S2A$ENTREZID
+entrez_sig.dwn.S3A <- ids_sig.dwn.S3A$ENTREZID
+
+ids_all.S1A <- bitr(rownames(dexp.S1A),fromType = "SYMBOL", toType   = "ENTREZID", OrgDb    = org.Hs.eg.db)
+ids_all.S2A <- bitr(rownames(dexp.S2A),fromType = "SYMBOL", toType   = "ENTREZID", OrgDb    = org.Hs.eg.db)
+ids_all.S3A <- bitr(rownames(dexp.S3A), fromType = "SYMBOL", toType   = "ENTREZID", OrgDb    = org.Hs.eg.db)
+
+entrez_universe.dwn.S1A <- ids_all.S1A$ENTREZID
+entrez_universe.dwn.S2A <- ids_all.S2A$ENTREZID
+entrez_universe.dwn.S3A <- ids_all.S3A$ENTREZID
+
+kgo.dwn.S1A <- enrichKEGG(gene = entrez_sig.dwn.S1A, organism = "hsa", universe = entrez_universe.S1A, pvalueCutoff  = 0.05)
+kgo.dwn.S2A <- enrichKEGG(gene = entrez_sig.dwn.S2A, organism = "hsa", universe = entrez_universe.S2A, pvalueCutoff  = 0.05)
+kgo.dwn.S3A <- enrichKEGG(gene = entrez_sig.dwn.S3A, organism = "hsa", universe = entrez_universe.S3A, pvalueCutoff  = 0.05)
+
+dotplot(kgo.dwn.S1A,showCategory=20,font.size=10,label_format=70)+ scale_size_continuous(range=c(1, 7))+
+  theme_minimal() + ggtitle("KEGG Enrichment of down-regulated genes")
+dotplot(kgo.dwn.S2A,showCategory=20,font.size=10,label_format=70)+ scale_size_continuous(range=c(1, 7))+
+  theme_minimal() +ggtitle("KEGG Enrichment of down-regulated genes")
+
+mlist.dwn.S1A<-list(s_ego.dwn.S1A,kgo.dwn.S1A)
+mlist.dwn.S2A<-list(s_ego.dwn.S2A,kgo.dwn.S2A)
+mlist.dwn.S3A<-list(s_ego.dwn.S3A,kgo.dwn.S3A)
+
+names(mlist.dwn.S1A)<-c("GO-enrich","KEGG-enrich")
+names(mlist.dwn.S2A)<-c("GO-enrich","KEGG-enrich")
+names(mlist.dwn.S3A)<-c("GO-enrich","KEGG-enrich")
+
+mresult.dwn.S1A<-merge_result(mlist.dwn.S1A)
+mresult.dwn.S2A<-merge_result(mlist.dwn.S2A)
+mresult.dwn.S3A<-merge_result(mlist.dwn.S3A)
+
+dotplot(mresult.dwn.S1A,showCategory=10)
+dotplot(mresult.dwn.S2A,showCategory=10)
+dotplot(mresult.dwn.S3A,showCategory=10)
+
+geneList.upreg <- list( Study1 = rownames(sig_up.S1A), Study2 = rownames(sig_up.S2A), Study3 = rownames(sig_up.S3A))
+
+compareGO.upreg <- compareCluster( geneCluster = geneList.upreg, fun = "enrichGO", OrgDb = org.Hs.eg.db, keyType = "SYMBOL", ont = "BP")
+
+compareGO.upreg <- simplify(compareGO.upreg)
+
+dotplot(compareGO.upreg)
+
+dotplot(compareGO.upreg) + labs(title = "GO Biological Process Enrichment (Upregulated Genes)") +
+  theme( plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+ids_S1A.up <- bitr(rownames(sig_up.S1A), fromType = "SYMBOL", toType   = "ENTREZID", OrgDb  = org.Hs.eg.db)
+ids_S2A.up <- bitr(rownames(sig_up.S2A),  fromType = "SYMBOL", toType   = "ENTREZID", OrgDb  = org.Hs.eg.db) 
+ids_S3A.up <- bitr(rownames(sig_up.S3A), fromType = "SYMBOL", toType   = "ENTREZID",  OrgDb  = org.Hs.eg.db)
+
+genes_S1A.up <- ids_S1A.up$ENTREZID
+genes_S2A.up <- ids_S2A.up$ENTREZID
+genes_S3A.up <- ids_S3A.up$ENTREZID
+
+gene_clusters.up <- list( Study1 = genes_S1A.up, Study2 = genes_S2A.up, Study3 = genes_S3A.up)
+
+kegg_compare.up <- compareCluster( geneCluster = gene_clusters.up, fun = "enrichKEGG", organism = "hsa")
+
+dotplot(kegg_compare.up) +labs(title = "KEGG Pathway Enrichment (Upregulated Genes)") +
+  theme( plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+geneList.dwnreg <- list(Study1 = rownames(sig_down.S1A),Study2 = rownames(sig_down.S2A),Study3 = rownames(sig_down.S3A))
+
+compareGO.dwnreg <- compareCluster( geneCluster = geneList.dwnreg, fun = "enrichGO", OrgDb = org.Hs.eg.db, keyType = "SYMBOL", ont = "BP")
+
+compareGO.dwnreg <- simplify(compareGO.dwnreg)
+
+dotplot(compareGO.dwnreg) + labs(title = "GO Biological Process Enrichment (Downregulated Genes)") +
+  theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+ids_S1A.dwn <- bitr(rownames(sig_down.S1A), fromType = "SYMBOL", toType   = "ENTREZID", OrgDb    = org.Hs.eg.db)
+ids_S2A.dwn <- bitr(rownames(sig_down.S2A),  fromType = "SYMBOL",  toType   = "ENTREZID", OrgDb    = org.Hs.eg.db)
+ids_S3A.dwn <- bitr(rownames(sig_down.S3A),  fromType = "SYMBOL",   toType   = "ENTREZID",  OrgDb    = org.Hs.eg.db)
+
+genes_S1A.dwn <- ids_S1A.dwn$ENTREZID
+genes_S2A.dwn <- ids_S2A.dwn$ENTREZID
+genes_S3A.dwn <- ids_S3A.dwn$ENTREZID
+
+gene_clusters.dwn <- list( Study1 = genes_S1A.dwn, Study2 = genes_S2A.dwn, Study3 = genes_S3A.dwn)
+
+kegg_compare.dwn <- compareCluster( geneCluster = gene_clusters.dwn, fun = "enrichKEGG", organism = "hsa")
+
+dotplot(kegg_compare.dwn) + labs(title = "KEGG Pathway Enrichment (Downregulated Genes)") +
+  theme( plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+
+#Gene Set Enrichment Analysis
+
+GSEA_data.S1A <-dexp.S1A %>% filter(!is.na(padj)) %>% arrange(desc(stat)) 
+GSEA_data.S2A <-dexp.S2A %>% filter(!is.na(padj)) %>% arrange(desc(stat)) 
+GSEA_data.S3A <-dexp.S3A %>% filter(!is.na(padj)) %>% arrange(desc(stat)) 
+
+gene_list.S1A <- GSEA_data.S1A$stat
+gene_list.S2A <- GSEA_data.S2A$stat
+gene_list.S3A <- GSEA_data.S3A$stat
+
+names(gene_list.S1A) <- rownames(GSEA_data.S1A)
+names(gene_list.S2A) <- rownames(GSEA_data.S2A)
+names(gene_list.S3A) <- rownames(GSEA_data.S3A)
+
+msigdb <- msigdbr(species = "Homo sapiens", category = "C5")
+
+sessionInfo()
+pathways <- split(msigdb$gene_symbol, msigdb$gs_name)
+
+fgsea_results.S1A <- fgsea(pathways = pathways,stats = gene_list.S1A,minSize = 15, maxSize = 500,nperm = 10000)
+fgsea_results.S2A <- fgsea(pathways = pathways,stats = gene_list.S2A,minSize = 15, maxSize = 500,nperm = 10000)
+fgsea_results.S3A <- fgsea(pathways = pathways,stats = gene_list.S3A,minSize = 15, maxSize = 500,nperm = 10000)
+
+fgsea_results.S1A <- fgsea_results.S1A[order(fgsea_results.S1A$padj), ]
+fgsea_results.S2A <- fgsea_results.S2A[order(fgsea_results.S2A$padj), ]
+fgsea_results.S3A <- fgsea_results.S3A[order(fgsea_results.S3A$padj), ]
+
+sum(fgsea_results.S1A$padj < 0.05)
+sum(fgsea_results.S2A$padj < 0.05)
+sum(fgsea_results.S3A$padj < 0.05)
+
+ggplot(fgsea_results.S1A[1:30,], aes(reorder(pathway, NES), NES)) + geom_col() + coord_flip()
+ggplot(fgsea_results.S2A[1:30,],  aes(reorder(pathway, NES), NES)) + geom_col() +coord_flip()
+ggplot(fgsea_results.S3A[1:30,], aes(reorder(pathway, NES), NES)) + geom_col() + coord_flip()
+
+sig_pathways.S1A <- fgsea_results.S1A %>% dplyr::filter(padj < 0.05)
+sig_pathways.S2A <- fgsea_results.S2A %>% dplyr::filter(padj < 0.05)
+sig_pathways.S3A <- fgsea_results.S3A %>% dplyr::filter(padj < 0.05)
+
+paths.S1A <- sig_pathways.S1A$pathway
+paths.S2A <- sig_pathways.S2A$pathway
+paths.S3A <- sig_pathways.S3A$pathway
+
+common.paths <- intersect(paths.S1A, paths.S2A, paths.S3A)
+
+pathway.lists <- list( Study1 = paths.S1A, Study2 = paths.S2A, Study3 = paths.S3A)
+
+upset(fromList(pathway.lists))
+
+plotEnrichment( pathways[["GOBP_INTERFERON_MEDIATED_SIGNALING_PATHWAY"]], gene_list.S2A)
+
+top.S1A <- fgsea_results.S1A %>% filter(padj < 0.05) %>% arrange(desc(abs(NES)))
+top.S2A <- fgsea_results.S2A %>% filter(padj < 0.05) %>% arrange(desc(abs(NES)))
+top.S3A <- fgsea_results.S3A %>% filter(padj < 0.05) %>% arrange(desc(abs(NES)))
+
+Top.pathway.lists <- list( Study1 = top.S1A, Study2 = top.S2A, Study3 = top.S3A)
+
+filtered_FGSEA.S2A <- fgsea_results.S2A %>% filter(str_detect(pathway, "EXTRACELLULAR|TRANSFORMING|INTEGRIN|LIPOATROPHY|LIPODYSTROPHY"))
+filtered_FGSEA.S3A <- fgsea_results.S3A %>% filter(str_detect(pathway, "EXTRACELLULAR|TRANSFORMING|INTEGRIN|LIPOATROPHY|LIPODYSTROPHY"))
+
+#cross dataset integration
+
+dexp.S1a_renamed <- dexp.S1A %>% rownames_to_column("gene") %>% rename(pvalue_1 = pvalue, log2FC_1 = log2FoldChange)
+dexp.S2A_renamed <- dexp.S2A %>% rownames_to_column("gene") %>% rename(pvalue_2 = pvalue, log2FC_2 = log2FoldChange)
+dexp.S3A_renamed <- dexp.S3A %>% rownames_to_column("gene") %>% rename(pvalue_3 = pvalue, log2FC_3 = log2FoldChange)
+
+merged_dexp <- dexp.S1a_renamed %>% inner_join(dexp.S2A_renamed, by = "gene") %>% inner_join(dexp.S3A_renamed, by = "gene")
+
+p_mat <- as.matrix(merged_dexp[, c("pvalue_1", "pvalue_2", "pvalue_3")])
+
+p_mat[p_mat == 0] <- 1e-300
+
+fisher_stat <- -2 * rowSums(log(p_mat))
+
+fisher_p <- pchisq(fisher_stat, df = 6, lower.tail = FALSE)
+
+merged_dexp$fisher_p <- fisher_p
+
+merged_dexp$fisher_padj <- p.adjust(fisher_p, method = "BH")
+
+merged_dexp$combined_log2FC <- rowMeans( merged_dexp[, c("log2FC_1", "log2FC_2", "log2FC_3")], na.rm = TRUE)
+
+top20_sig.genes <- merged_dexp[order(merged_dexp$fisher_padj), ][1:20, ]
+
+merged_dexp$consistent_direction <- sign(merged_dexp$log2FC_1) == sign(merged_dexp$log2FC_2) &
+  sign(merged_dexp$log2FC_1) == sign(merged_dexp$log2FC_3)
+
+consistent_genes <- merged_dexp %>% filter(consistent_direction == TRUE)
+
+significant_genes <- consistent_genes %>% filter(fisher_padj < 0.05)
+
+Sig_genes.sorted <- significant_genes %>% arrange(fisher_padj)
+
+top20 <- significant_genes %>% arrange(fisher_padj) %>% slice(1:20)
+
+final_results <- merged_dexp[, c("gene","fisher_p","fisher_padj","combined_log2FC","consistent_direction")]
+
+top_gene_list <- top20$gene
+
+rld.mged1 <- rlog(dds.S1A, blind = FALSE)
+rld.mged2 <- rlog(dds.S2A, blind = FALSE)
+rld.mged3 <- rlog(dds.S3A, blind = FALSE)
+
+expr1 <- assay(rld.mged1)
+expr2 <- assay(rld.mged2)
+expr3 <- assay(rld.mged3)
+
+heat1 <- expr1[top_gene_list, ]
+heat2 <- expr2[top_gene_list, ]
+heat3 <- expr3[top_gene_list, ]
+
+pheatmap(heat1, scale = "row", main = "Dataset S1")
+pheatmap(heat2, scale = "row", main = "Dataset S2")
+pheatmap(heat3, scale = "row", main = "Dataset S3")
+
+small.merged <- merged_dexp[,c("gene", "fisher_p", "fisher_padj", "consistent_direction")]
+
+sig20_genes <- small.merged %>% filter(consistent_direction == TRUE) %>% arrange(fisher_padj) %>% slice(1:20)
+
+#Overlap
+
+genes.olap_S1A <- rownames(sigDEGs.S1A)
+genes.olap_S2A <- rownames(sigDEGs.S2A)
+genes.olap_S3A <- rownames(sigDEGs.S3A)
+
+venn.diagram( x = list( S1A = genes.olap_S1A, S2A = genes.olap_S2A, S3A = genes.olap_S3A),
+  filename = "downregulated_overlap.png",fill = c("red", "blue", "green"),
+  alpha = 0.5, cex = 1.5, cat.cex = 1.5)
+
+gene_lists.olap <- list( S1A = genes.olap_S1A, S2A = genes.olap_S2A, S3A = genes.olap_S3A)
+
+upset(fromList(gene_lists.olap), mainbar.y.label = "Intersection Size", sets.x.label = "All Significant Gene sets")
+
+grid.text("Overlap of Signifcant Genes across All three Studies", x = 0.5, y = 0.98, gp = gpar(fontsize = 16, fontface = "bold"))
+
+common_down <- Reduce(intersect, list( rownames(sig_down.S1A), rownames(sig_down.S2A), rownames(sig_down.S3A)))
+
+Genes.cmn.dwn <- bitr( common_down, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+
+gene_ids.cmn.dwn <- Genes.cmn.dwn$ENTREZID
+
+ego_common_down <- enrichGO( gene = gene_ids.cmn.dwn, OrgDb = org.Hs.eg.db, ont = "BP", pAdjustMethod = "BH", pvalueCutoff  = 0.05, readable      = TRUE)
+
+ekegg_common_down <- enrichKEGG( gene = gene_ids.cmn.dwn, organism = "hsa", pvalueCutoff = 0.05)
+
+dotplot(ekegg_common_down, showCategory = 10)
+
+barplot(ego_common_down, showCategory = 20)
+
+genes_S1A.up <- rownames(sig_up.S1A)
+genes_S2A.up <- rownames(sig_up.S2A)
+genes_S3A.up <- rownames(sig_up.S3A)
+
+venn.diagram( x = list(S1A = genes_S1A.up, S2A = genes_S2A.up, S3A = genes_S3A.up),
+  filename = "upregulated_overlap.png", fill = c("red", "blue", "green"),
+  alpha = 0.5, cex = 1.5, cat.cex = 1.5)
+
+gene_lists.up <- list( S1A = genes_S1A.up, S2A = genes_S2A.up, S3A = genes_S3A.up)
+
+upset(fromList(gene_lists.up), mainbar.y.label = "Intersection Size", sets.x.label = "Upregulated Gene Sets", text.scale = 1.2)
+
+grid.text("Overlap of Upregulated Genes Across KO vs WT Studies", x = 0.5, y = 0.98,  gp = gpar(fontsize = 16, fontface = "bold"))
+
+genes_intersect.up <- Reduce(intersect, list(genes_S1A.up, genes_S2A.up, genes_S3A.up))
+
+universe_genes <- Reduce(intersect, list(rownames(dexp.S1A), rownames(dexp.S2A), rownames(dexp.S3A)))
+
+ego_intersect.up <- enrichGO( gene = genes_intersect.up, OrgDb = org.Hs.eg.db, keyType = "SYMBOL", ont = "BP", universe = universe_genes)
+
+s.ego_intersect.up <- simplify(ego_intersect.up)
+
+dotplot(s.ego_intersect.up) +
+  labs(title = "GO Biological Process Enrichment (Upregulated Genes common in all studies)") +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+ids_intersect <- bitr(
+  genes_intersect,
+  fromType = "SYMBOL",
+  toType = "ENTREZID",
+  OrgDb = org.Hs.eg.db
+)
+
+entrez_intersect <- ids_intersect$ENTREZID
+
+ids_universe <- bitr( universe_genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+
+entrez_universe <- ids_universe$ENTREZID
+
+kegg_intersect.up <- enrichKEGG( gene = entrez_intersect, organism = "hsa", universe = entrez_universe, pvalueCutoff = 0.05)
+
+dotplot(kegg_intersect.up) + labs(title = "KEGG Pathway Enrichment (Upregulated Genes common in all studies)") +
+  theme( plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+genes_S1A.dwn <- rownames(sig_down.S1A)
+genes_S2A.dwn <- rownames(sig_down.S2A)
+genes_S3A.dwn <- rownames(sig_down.S3A)
+
+venn.diagram( x = list( S1A = genes_S1A.dwn, S2A = genes_S2A.dwn, S3A = genes_S3A.dwn),
+  filename = "downregulated_overlap.png",fill = c("red", "blue", "green"),
+  alpha = 0.5,cex = 1.5,cat.cex = 1.5)
+
+gene_lists.dwn <- list( S1A = genes_S1A.dwn, S2A = genes_S2A.dwn, S3A = genes_S3A.dwn)
+
+upset(fromList(gene_lists.dwn), mainbar.y.label = "Intersection Size", sets.x.label = "Downregulated Gene Sets", text.scale = 1.2)
+
+grid.text("Overlap of Downregulated Genes Across KO vs WT Studies", x = 0.5, y = 0.98, gp = gpar(fontsize = 16, fontface = "bold"))
+
+gene_lists.dwn <- list( S1A = genes_S1A.dwn, S2A = genes_S2A.dwn, S3A = genes_S3A.dwn)
+
+upset(fromList(gene_lists.dwn))
+
+genes_intersect.dwn <- Reduce(intersect, list(genes_S1A.dwn, genes_S2A.dwn, genes_S3A.dwn))
+
+universe_genes <- Reduce(intersect, list( rownames(dexp.S1A), rownames(dexp.S2A), rownames(dexp.S3A)))
+
+ego_intersect.dwn <- enrichGO( gene = genes_intersect.dwn, OrgDb = org.Hs.eg.db, keyType = "SYMBOL", ont = "BP", universe = universe_genes)
+
+s.ego_intersect.dwn <- simplify(ego_intersect.dwn)
+
+dotplot(s.ego_intersect.dwn) + labs(title = "GO Biological Process Enrichment (Downregulated Genes common in all studies)") +
+  theme( plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+ids_intersect.dwn <- bitr( genes_intersect.dwn, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+
+entrez_intersect.dwn <- ids_intersect.dwn$ENTREZID
+
+ids_universe <- bitr( universe_genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+
+entrez_universe <- ids_universe$ENTREZID
+
+kegg_intersect.dwn <- enrichKEGG( gene = entrez_intersect.dwn, organism = "hsa", universe = entrez_universe, pvalueCutoff = 0.05)
+
+dotplot(kegg_intersect.dwn,) + labs(title = "KEGG Pathway Enrichment (Downregulated Genes common in all studies)") +
+  theme( plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
+
+Genes.sig.1 <- rownames(sigDEGs.S1A)
+Genes.sig.2 <- rownames(sigDEGs.S2A)
+Genes.sig.3 <- rownames(sigDEGs.S3A)
+
+
+gene_list.sig <- list( Study1 = Genes.sig.1, Study2 = Genes.sig.2, Study3 = Genes.sig.3)
+
+upset(fromList(gene_list.sig),  mainbar.y.label = "Intersection Size",  sets.x.label = "Differentially expressed Genes",  text.scale = 1.2)
+grid.text("Overlap of Differentially expressed Genes Across all Studies", x = 0.5, y = 0.98, gp = gpar(fontsize = 16, fontface = "bold"))
