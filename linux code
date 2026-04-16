@@ -63,9 +63,38 @@ for bam in *Aligned.sortedByCoord.out.bam; do   samtools index "$bam" -@ 12; don
 
 mkdir -p /mnt/data/GCB2026/cianwhiteley/Raw_Fastq/FastQC_trimmed/BamFiles/RseQC
 
+infer_experiment.py -r /mnt/data/Reference_genomes/Human/UCSC/hg38.ncbiRefSeq.bed12 -i trimmed_Study3_WT_rep1Aligned.sortedByCoord.out.bam
 
+for i in *Aligned.sortedByCoord.out.bam; do bam_stat.py -i $i > ~/Trimmed_Fastq/BamFiles/RseQC/${i%Aligned.sortedByCoord.out.bam}.bamstats.txt; done
 
+for i in *Aligned.sortedByCoord.out.bam; do
+read_distribution.py -i $i -r /mnt/data/Reference_genomes/Human/UCSC/hg38.ncbiRefSeq.bed12 > ~/Trimmed_Fastq/BamFiles/RseQC/${i%Aligned.sortedByCoord.out.bam}.read_dist.txt
+done
 
+for i in *Aligned.sortedByCoord.out.bam; do samtools view -c "$i" 2>/dev/null done
 
+for i in *Aligned.sortedByCoord.out.bam; do samtools view -s 0.0016 -o ${i%.bam}_subset.bam "$i" 2>/dev/null done
 
+for i in *Aligned.sortedByCoord.out_subset.bam; do samtools index "$i" 2>/dev/null done
 
+for i in *Aligned.sortedByCoord.out_subset.bam; do samtools view -c "$i" 2>/dev/null done
+
+for i in *Aligned.sortedByCoord.out_subset.bam; do geneBody_coverage.py -i $i -r /mnt/data/Reference_genomes/Human/UCSC/hg38.ncbiRefSeq.bed12 -o ~/Trimmed_Fastq/BamFiles/RseQC/${i%Aligned.sortedByCoord.out_subset.bam} done
+
+mkdir -p /mnt/data/GCB2026/cianwhiteley/name_sorted_bams
+
+for i in *Aligned.sortedByCoord.out.bam; do samtools sort -n -@ 12 -o ~/name_sorted_bams/${i%Aligned.sortedByCoord.out.bam}_namesorted.bam "$i" 2>/dev/null done
+
+featureCounts -T 12 -s 2 -p --countReadPairs -C -a /mnt/data/Reference_genomes/Human/UCSC/hg38.ncbiRefSeq.gtf -o featurecounts.txt *namesorted.bam 2> featurecounts.screen-output.log
+
+mkdir -p /mnt/data/GCB2026/cianwhiteley/name_sorted_bams/namesorted_Study1
+mkdir -p /mnt/data/GCB2026/cianwhiteley/name_sorted_bams/namesorted_Study2
+mkdir -p /mnt/data/GCB2026/cianwhiteley/name_sorted_bams/namesorted_Study3
+
+mv *Study1* namesorted_Study1/
+mv *Study2* namesorted_Study2/
+mv *Study3* namesorted_Study3/
+
+multiqc namesorted_Study1
+multiqc namesorted_Study2
+multiqc namesorted_Study3
