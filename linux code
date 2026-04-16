@@ -1,6 +1,71 @@
+mkdir Raw_Fastq
 
+mv *.fastq.gz Raw_Fastq
 
+mkdir -p /mnt/data/GCB2026/cianwhiteley/Raw_Fastq/FastQC
+
+fastqc *.fastq.gz --outdir=/mnt/data/GCB2026/username/raw_fastq/FastQC
+
+mkdir -p /mnt/data/GCB2026/cianwhiteley/Raw_Fastq/FastQC/FastQC_Study1
+mkdir -p /mnt/data/GCB2026/cianwhiteley/Raw_Fastq/FastQC/FastQC_Study2
+mkdir -p /mnt/data/GCB2026/cianwhiteley/Raw_Fastq/FastQC/FastQC_Study3
+
+mv Study1* FastQC_Study1
+mv Study2* FastQC_Study2
+mv Study3* FastQC_Study3
+
+multiqc FastQC_Study1
+multiqc FastQC_Study2
+multiqc FastQC_Study3
 
 for i in *_1.fastq.gz; do 
 cutadapt -j=4 -a AGATCGGAAGAG -A AGATCGGAAGAG --poly-a --output=trimmed_$i --paired-output=trimmed_${i%_1.fastq.gz}_2.fastq.gz --error-rate=0.1 --times=1 --overlap=5 --action=trim --minimum-length=35 --pair-filter=any $i ${i%_1.fastq.gz}_2.fastq.gz done
  
+mkdir -p /mnt/data/GCB2026/cianwhiteley/Raw_Fastq/FastQC_trimmed
+
+fastqc trimmed_*.fastq.gz --outdir=/FastQC_trimmed
+
+mv trimmed_*_fastqc.* FastQC_trimmed/
+
+mkdir multiQC_Trimmed_Study1
+mkdir multiQC_Trimmed_Study2
+mkdir multiQC_Trimmed_Study3
+
+mv trimmed_Study1*_fastqc.* multiQC_Trimmed_Study1
+mv trimmed_Study2*_fastqc.* multiQC_Trimmed_Study2 
+mv trimmed_Study3*_fastqc.* multiQC_Trimmed_Study3 
+
+multiqc multiQC_Trimmed_Study1
+multiqc multiQC_Trimmed_Study2
+multiqc multiQC_Trimmed_Study3
+
+mkdir Trimmed_Fastq
+
+mv trimmed_*.fastq.gz /mnt/data/GCB2026/cianwhiteley/Trimmed_Fastq
+
+for i in trimmed_Study1_*_1.fastq.gz; do   SAMPLE=${i%_1.fastq.gz}   STAR     --genomeDir /media/newdrive/data/Reference_genomes/Human/UCSC/STAR_UCSC_refseq    --runThreadN 12 ;     --readFilesIn "$i" "${SAMPLE}_2.fastq.gz" ;     --readFilesCommand zcat ;     --outFileNamePrefix Alignments/Study1/${SAMPLE}_ ;     --outSAMtype BAM SortedByCoordinate ;     --outSAMunmapped Within ;     --outSAMattributes Standard ;     --sjdbGTFfile /media/newdrive/data/Reference_genomes/Human/UCSC/hg38.ncbiRefSeq.gtf ;     --sjdbOverhang 74; done
+
+mkdir -p /mnt/data/GCB2026/cianwhiteley/Raw_Fastq/FastQC_trimmed/BamFiles
+
+mv trimmed*.out BamFiles
+mv trimmed*.out.tab BamFiles
+
+multiqc BamFiles
+
+samtools view -H trimmed_*_rep3Aligned.sortedByCoord.out.bam
+samtools view trimmed_*_rep3Aligned.sortedByCoord.out.bam | less -S
+samtools view trimmed_Study3_WT_rep5Aligned.sortedByCoord.out.bam | less -S
+samtools view trimmed_*_*Aligned.sortedByCoord.out.bam | wc -l
+
+samtools flagstat trimmed_Study1_week7_KO_rep1Aligned.sortedByCoord.out.bam | head
+
+for bam in *Aligned.sortedByCoord.out.bam; do   samtools index "$bam" -@ 12; done  
+
+mkdir -p /mnt/data/GCB2026/cianwhiteley/Raw_Fastq/FastQC_trimmed/BamFiles/RseQC
+
+
+
+
+
+
+
