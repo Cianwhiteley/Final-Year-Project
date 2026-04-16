@@ -1,0 +1,6 @@
+
+
+
+for i in *_1.fastq.gz; do 
+cutadapt -j=4 -a AGATCGGAAGAG -A AGATCGGAAGAG --poly-a --output=trimmed_$i --paired-output=trimmed_${i%_1.fastq.gz}_2.fastq.gz --error-rate=0.1 --times=1 --overlap=5 --action=trim --minimum-length=35 --pair-filter=any $i ${i%_1.fastq.gz}_2.fastq.gz done
+ 
