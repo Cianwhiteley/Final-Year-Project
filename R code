@@ -1,3 +1,4 @@
+#Initial data import and DGE
 counts <- read.table("featurecounts.txt", header = TRUE)
 
 row.names(counts) <- counts$Geneid
@@ -155,10 +156,10 @@ heatmap.S1 <- as.ggplot(heatmap.S1$gtable)
 heatmap.S2 <- as.ggplot(heatmap.S2$gtable)
 heatmap.S3 <- as.ggplot(heatmap.S3$gtable)
 
-(heatmap.S1 / heatmap.S2 / heatmap.S3) + 
-  plot_annotation( title = "Hierarchical Clustering of Samples Across Studies",
-                                                          theme = theme( plot.title = element_text(size = 18, face = "bold", hjust = 0.5)))
-
+Heatmap.top20 <- (heatmap.S1 / heatmap.S2 / heatmap.S3) + 
+  plot_annotation(title = "Top 20 Differentially Expressed Genes per Study")
+                                                   
+ggsave("heatmaps.png", Heatmap.top20, width = 10, height = 18, dpi = 300)
 
 KOvsWT_tb.S1 <- KOvsWT.S1 %>% data.frame() %>% rownames_to_column(var="gene") %>% as_tibble()
 KOvsWT_tb.S2 <- KOvsWT.S2 %>% data.frame() %>% rownames_to_column(var="gene") %>% as_tibble()
@@ -338,13 +339,9 @@ s_ego.S1A %>% filter(p.adjust < 0.03) %>%
   scale_color_viridis_c(guide=guide_colorbar(reverse=TRUE)) + scale_size_continuous(range=c(1, 7)) +
   theme_minimal() + xlab("Gene Ratio") + ylab(NULL) + ggtitle("GO Enrichment of up-regulated genes")
 
-s_ego.S2A %>% filter(p.adjust < 0.03) %>% ggplot(showCategory = 20,aes(GeneRatio, forcats::fct_reorder(Description, GeneRatio))) + geom_segment(aes(xend=0, yend = Description)) + geom_point(aes(color=p.adjust, size = Count)) +  scale_color_viridis_c(guide=guide_colorbar(reverse=TRUE)) + scale_size_continuous(range=c(1, 7)) + theme_minimal() +  xlab("Gene Ratio") +ylab(NULL) +  ggtitle("GO Enrichment of up-regulated genes" 
+s_ego.S2A %>% filter(p.adjust < 0.03) %>% ggplot(showCategory = 20,aes(GeneRatio, forcats::fct_reorder(Description, GeneRatio))) + geom_segment(aes(xend=0, yend = Description)) + geom_point(aes(color=p.adjust, size = Count)) +  scale_color_viridis_c(guide=guide_colorbar(reverse=TRUE)) + scale_size_continuous(range=c(1, 7)) + theme_minimal() +  xlab("Gene Ratio") +ylab(NULL) +  ggtitle("GO Enrichment of up-regulated genes") 
                                                                
-s_ego.S3A %>% filter(p.adjust < 0.03) %>%
-  ggplot(showCategory = 20, aes(GeneRatio, forcats::fct_reorder(Description, GeneRatio))) + 
-  geom_segment(aes(xend=0, yend = Description)) + geom_point(aes(color=p.adjust, size = Count)) +
-  scale_color_viridis_c(guide=guide_colorbar(reverse=TRUE)) + scale_size_continuous(range=c(1, 7)) +
-  theme_minimal() + xlab("Gene Ratio") + ylab(NULL) + ggtitle("GO Enrichment of up-regulated genes")
+s_ego.S3A %>% filter(p.adjust < 0.03) %>% ggplot(showCategory = 20, aes(GeneRatio, forcats::fct_reorder(Description, GeneRatio))) + geom_segment(aes(xend=0, yend = Description)) + geom_point(aes(color=p.adjust, size = Count)) + scale_color_viridis_c(guide=guide_colorbar(reverse=TRUE)) + scale_size_continuous(range=c(1, 7)) + theme_minimal() + xlab("Gene Ratio") + ylab(NULL) + ggtitle("GO Enrichment of up-regulated genes")
 
 foldchanges.ORA.S1A <- sig_up.S1A$log2FoldChange
 foldchanges.ORA.S2A <- sig_up.S2A$log2FoldChange
@@ -458,9 +455,9 @@ s_ego2.dwn.S1A@result<-s_ego.dwn.S1A[c(6,15,32),]
 s_ego2.dwn.S2A@result<-s_ego.dwn.S2A[c(6,15,32),]
 s_ego2.dwn.S3A@result<-s_ego.dwn.S3A[c(6,15,32),]
 
-cnetplot(s_ego2.dwn.S1A, foldChange = foldchanges.dwn.S1A,color_category = "purple")
-cnetplot(s_ego2.dwn.S2A, foldChange = foldchanges.dwn.S2A, color_category = "purple")
-cnetplot(s_ego2.dwn.S3A, foldChange = foldchanges.S3A, color_category = "purple")
+cnetplot(s_ego2.dwn.S1A, foldChange = foldchanges.ORA.S1A,color_category = "purple")
+cnetplot(s_ego2.dwn.S2A, foldChange = foldchanges.ORA.S2A, color_category = "purple")
+cnetplot(s_ego2.dwn.S3A, foldChange = foldchanges.ORA.S3A, color_category = "purple")
 
 ids_sig.dwn.S1A <- bitr(rownames(sig_down.S1A),fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
 ids_sig.dwn.S2A <- bitr(rownames(sig_down.S2A),fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
@@ -524,6 +521,7 @@ genes_S3A.up <- ids_S3A.up$ENTREZID
 
 gene_clusters.up <- list( Study1 = genes_S1A.up, Study2 = genes_S2A.up, Study3 = genes_S3A.up)
 
+
 kegg_compare.up <- compareCluster( geneCluster = gene_clusters.up, fun = "enrichKEGG", organism = "hsa")
 
 dotplot(kegg_compare.up) +labs(title = "KEGG Pathway Enrichment (Upregulated Genes)") +
@@ -535,7 +533,7 @@ compareGO.dwnreg <- compareCluster( geneCluster = geneList.dwnreg, fun = "enrich
 
 compareGO.dwnreg <- simplify(compareGO.dwnreg)
 
-dotplot(compareGO.dwnreg) + labs(title = "GO Biological Process Enrichment (Downregulated Genes)") +
+ dotplot(compareGO.dwnreg) + labs(title = "GO Biological Process Enrichment (Downregulated Genes)") +
   theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
 
 ids_S1A.dwn <- bitr(rownames(sig_down.S1A), fromType = "SYMBOL", toType   = "ENTREZID", OrgDb    = org.Hs.eg.db)
@@ -693,6 +691,7 @@ common_down <- Reduce(intersect, list( rownames(sig_down.S1A), rownames(sig_down
 
 Genes.cmn.dwn <- bitr( common_down, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
 
+
 gene_ids.cmn.dwn <- Genes.cmn.dwn$ENTREZID
 
 ego_common_down <- enrichGO( gene = gene_ids.cmn.dwn, OrgDb = org.Hs.eg.db, ont = "BP", pAdjustMethod = "BH", pvalueCutoff  = 0.05, readable      = TRUE)
@@ -731,7 +730,7 @@ dotplot(s.ego_intersect.up) +
     plot.title = element_text(size = 16, face = "bold", hjust = 0.5))
 
 ids_intersect <- bitr(
-  genes_intersect,
+  genes_intersect.up,
   fromType = "SYMBOL",
   toType = "ENTREZID",
   OrgDb = org.Hs.eg.db
@@ -799,3 +798,4 @@ gene_list.sig <- list( Study1 = Genes.sig.1, Study2 = Genes.sig.2, Study3 = Gene
 
 upset(fromList(gene_list.sig),  mainbar.y.label = "Intersection Size",  sets.x.label = "Differentially expressed Genes",  text.scale = 1.2)
 grid.text("Overlap of Differentially expressed Genes Across all Studies", x = 0.5, y = 0.98, gp = gpar(fontsize = 16, fontface = "bold"))
+
